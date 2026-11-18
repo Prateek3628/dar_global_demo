@@ -189,7 +189,7 @@ Rules:
   short line suggesting the user verify with DarGlobal/Wasalt or a licensed advisor.
 Context items are numbered. Cite every fact with the item number in square brackets, e.g. [3] or [2][5].
 Never write URLs yourself - the numbers become links automatically. When listing properties, show at most 6,
-each followed by its item number. If part of a question can't be answered from the context (e.g. floor plans,
+each followed by its item number. Quote figures exactly as written; never convert currencies or calculate new figures. If part of a question can't be answered from the context (e.g. floor plans,
 photos, availability), say so explicitly.
 Keep answers concise.
 
@@ -203,8 +203,26 @@ def answer(messages):
     docs, used = gather(users[-1], " ".join(users[-2:]))
     ctx = "\n\n".join(f"[{i}] ({d['source']}) {d['title']}\n{d['text']}" for i, d in enumerate(docs, 1))
     system = SYSTEM.format(now=now(), updated=STATE["updated"], ctx=ctx)
-    text, model = llm([{"role": "system", "content": system}] + messages[-8:])
+    msgs = [{"role": "system", "content": system}] + messages[-8:]
+    text, model = llm(msgs)
+    bad = ungrounded(text, docs)
+    if bad:  # model misquoted a figure: one retry with an explicit instruction, else flag it to the reader
+        print(f"ungrounded numbers {bad}, retrying", flush=True)
+        text, model = llm(msgs + [{"role": "assistant", "content": text}, {"role": "user", "content":
+                          f"These figures are not in the context: {', '.join(bad)}. Rewrite your answer copying every "
+                          "number exactly as written in the context items, and drop any figure you can't find there."}])
+        if ungrounded(text, docs):
+            text += "\n\n*Some figures could not be verified against the sources - please check the linked pages.*"
     return link_citations(unlink_invented(text, {d["url"] for d in docs}), docs), model, dict(used), docs
+
+
+def ungrounded(text, docs):
+    """Numbers >= 1,000 in the answer (prices, sizes, counts) that don't appear in any source text."""
+    src = re.sub(r"(?<=\d),(?=\d{3})", "", " ".join(d["title"] + " " + d["text"] for d in docs))
+    plain = re.sub(r"\(https?://[^)]*\)|https?://\S+|\[\d+\]", "", text)
+    nums = {n.replace(",", "") for n in re.findall(r"\d[\d,]*\d(?:\.\d+)?", plain)}
+    return sorted(n for n in nums if len(n.split(".")[0]) >= 4 and not re.fullmatch(r"(19|20)\d\d", n)
+                  and not re.search(rf"(?<![\d.]){re.escape(n)}(?![\d])", src))
 
 
 def link_citations(text, docs):
@@ -225,7 +243,7 @@ def llm(msgs):
     """OpenRouter free models first; Gemini free tier if OpenRouter fails (e.g. its 50/day free quota)."""
     errors = []
     try:
-        r = fetch_json("https://openrouter.ai/api/v1/chat/completions", {"models": MODELS, "messages": msgs}, {
+        r = fetch_json("https://openrouter.ai/api/v1/chat/completions", {"models": MODELS, "messages": msgs, "temperature": 0}, {
             "Authorization": f"Bearer {KEY}", "HTTP-Referer": "https://github.com/Prateek3628/dar_global_demo",
             "X-Title": "DarGlobal Wasalt Chatbot"}, timeout=90)
         return r["choices"][0]["message"]["content"], r.get("model")
@@ -234,7 +252,7 @@ def llm(msgs):
     for m in GEMINI_MODELS if GEMINI_KEY else []:
         try:
             r = fetch_json("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-                           {"model": m, "messages": msgs}, {"Authorization": f"Bearer {GEMINI_KEY}"}, timeout=90)
+                           {"model": m, "messages": msgs, "temperature": 0}, {"Authorization": f"Bearer {GEMINI_KEY}"}, timeout=90)
             return r["choices"][0]["message"]["content"], f"google/{m} (fallback)"
         except Exception as e:
             errors.append(f"gemini {m}: {e.read().decode()[:200] if hasattr(e, 'read') else e}")

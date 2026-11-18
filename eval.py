@@ -96,15 +96,11 @@ CASES = [
 def grounded(answer, context):
     """No invented facts: every link and every number >= 1,000 in the answer must appear in the model's context."""
     urls = {c["url"].rstrip("/") for c in context}
-    text = re.sub(r"(?<=\d),(?=\d{3})", "", " ".join(c["text"] for c in context))
     for u in re.findall(r"https?://[^\s)\]>]+", answer):
         if u.rstrip("/.,") not in urls:
             return f"link not in context {u}"
-    for n in re.findall(r"\d[\d,]*\d", re.sub(r"\(https?://[^)]*\)|https?://\S+", "", answer)):  # URLs checked above
-        n = n.replace(",", "")
-        if len(n) >= 4 and n not in text and not re.fullmatch(r"(19|20)\d\d", n):  # years are often derived
-            return f"number not in context {n}"
-    return None
+    bad = app.ungrounded(answer.split("*Some figures could not be verified")[0], [{"title": "", **c} for c in context])
+    return f"numbers not in context {bad}" if bad else None
 
 
 def cited(answer):

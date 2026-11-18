@@ -18,4 +18,8 @@ assert app.unlink_invented("[[Live web] T](https://darglobal.co.uk/fake)", ok) =
 docs = [{"url": "https://wasalt.sa/en"}, {"url": "https://en.wikipedia.org/wiki/DarGlobal"}]
 assert app.link_citations("Fact [2], other [1][9].", docs) == \
     "Fact [[2]](https://en.wikipedia.org/wiki/DarGlobal), other [[1]](https://wasalt.sa/en)."
+src = [{"title": "Villa", "text": "Price: 85000 SAR, area 209.25 SQM, 11,088 listings"}]
+assert app.ungrounded("Costs 85,000 SAR, 209.25 sqm, 11088 listings, built 2021 [1]", src) == []
+assert app.ungrounded("Costs 8,500 SAR", src) == ["8500"]                     # dropped zero is caught
+assert app.ungrounded("see [1](https://wasalt.sa/en/property/x-5923489)", src) == []   # numbers in links ignored
 print("ok")
