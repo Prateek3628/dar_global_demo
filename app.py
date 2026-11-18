@@ -93,6 +93,11 @@ def fetch_json(url, data=None, headers=None, timeout=10):
     return json.load(urllib.request.urlopen(req, timeout=timeout))
 
 
+def official(url):  # drop staging/other subdomains (e.g. preprod.darglobal.co.uk)
+    host = urllib.parse.urlparse(url).hostname or ""
+    return host.removeprefix("www.") in SITES
+
+
 def live(title, url, text):
     return {"source": "Live web", "title": title, "url": url, "text": re.sub(r"\s+", " ", text)[:1200]}
 
@@ -101,7 +106,7 @@ def tavily(q):
     r = fetch_json("https://api.tavily.com/search", {"query": q, "max_results": 6, "search_depth": "advanced",
                                                      "include_domains": SITES},
                    {"Authorization": f"Bearer {TAVILY_KEY}"})
-    return [live(x["title"], x["url"], x.get("content", "")) for x in r.get("results", [])]
+    return [live(x["title"], x["url"], x.get("content", "")) for x in r.get("results", []) if official(x["url"])]
 
 
 def brave(q):
@@ -110,7 +115,7 @@ def brave(q):
         p = urllib.parse.urlencode({"q": f"{q} site:{site}", "count": 5, "extra_snippets": 1})
         r = fetch_json(f"https://api.search.brave.com/res/v1/web/search?{p}", headers={"X-Subscription-Token": BRAVE_KEY})
         out += [live(x["title"], x["url"], " ".join([x.get("description", "")] + x.get("extra_snippets", [])))
-                for x in r.get("web", {}).get("results", [])]
+                for x in r.get("web", {}).get("results", []) if official(x["url"])]
     return out
 
 
@@ -188,8 +193,9 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != "/api/chat":
             return self.send(404, b"{}")
-        # last X-Forwarded-For hop is added by the hosting proxy; earlier ones are client-controlled
-        ip = (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[-1].strip()
+        # CDN-set headers can't be spoofed by clients; otherwise the last X-Forwarded-For hop (added by the proxy)
+        ip = (self.headers.get("CF-Connecting-IP") or self.headers.get("True-Client-IP")
+              or (self.headers.get("X-Forwarded-For") or self.client_address[0]).split(",")[-1].strip())
         if not allowed(ip):
             return self.send(429, json.dumps({"error": "You're sending questions too quickly - please wait a minute."}).encode())
         try:
