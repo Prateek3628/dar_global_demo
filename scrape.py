@@ -52,8 +52,11 @@ def wasalt():
     lines += [f"- {n} {t} units for daily rental / booking" for t, n in daily_types.most_common()]
     docs.append({"source": "Wasalt", "title": "Wasalt listings overview (statistics)",
                  "url": "https://wasalt.sa/en", "always": True,
-                 "text": f"Wasalt (wasalt.sa) is a Saudi Arabian property portal. Snapshot of {len(listings)} sale/rent "
-                         f"listings and {len(daily)} daily-rental units from its public sitemaps:\n" + "\n".join(lines)})
+                 "text": f"Wasalt (wasalt.sa) is a Saudi Arabian property portal. These counts cover the {len(listings)} sale/rent "
+                         f"listings and {len(daily)} daily-rental units in Wasalt's public sitemaps. The sitemap is capped "
+                         f"(about 60,000 listings), so totals on wasalt.sa itself may be higher; always say counts are "
+                         f"'in Wasalt's public sitemap'. Listing data has type, size, bedrooms, facing and street width, "
+                         f"but no city, price or photos:\n" + "\n".join(lines)})
 
     # one doc per location: which categories Wasalt has there
     cats = collections.defaultdict(set)
