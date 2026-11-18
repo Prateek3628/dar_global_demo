@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#111111">
+<title>DarGlobal Property Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+  /* DarGlobal-inspired palette: black, ivory, warm sand-gold (approximated) */
+  :root {
+    --black:#111111; --ivory:#f6f2ec; --sand:#e9e1d4; --gold:#b39470; --gold-deep:#8c7253;
+    --ink:#1c1b19; --muted:#7c766d; --line:#e2d9cb; --card:#ffffff; --bg:var(--ivory);
+    --bot-bg:var(--card); --user-bg:var(--black); --user-ink:var(--ivory);
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --ink:#efe9df; --muted:#a39b8f; --line:#2c2925; --card:#1b1a18; --bg:#0d0d0c;
+    --bot-bg:#1b1a18; --user-bg:var(--gold); --user-ink:#111;
+  } }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent }
+  html, body { height:100% }
+  body { margin:0; background:#0b0b0b; font:300 15px/1.6 Jost, system-ui, -apple-system, sans-serif; color:var(--ink) }
+
+  /* phone-shaped app; full-bleed on phones, framed on desktop */
+  .app { height:100dvh; max-width:440px; margin:0 auto; display:flex; flex-direction:column; background:var(--bg); position:relative; overflow:hidden }
+  @media (min-width:600px) { body { display:grid; place-items:center; padding:24px 0 } .app { height:min(860px, calc(100dvh - 48px)); width:440px; border-radius:36px; box-shadow:0 30px 80px rgba(0,0,0,.55), 0 0 0 10px #1a1a1a } }
+
+  header { background:var(--black); color:var(--ivory); padding:calc(14px + env(safe-area-inset-top)) 18px 16px; display:flex; align-items:center; gap:12px }
+  .mark { width:42px; height:42px; border:1px solid var(--gold); display:grid; place-items:center; font:600 15px 'Cormorant Garamond', serif; letter-spacing:.08em; color:var(--gold); flex:none }
+  .title { flex:1; min-width:0 }
+  .title h1 { margin:0; font:500 21px/1.1 'Cormorant Garamond', serif; letter-spacing:.14em; text-transform:uppercase }
+  .title p { margin:3px 0 0; font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:#bfb4a3 }
+  .status { display:inline-block; width:6px; height:6px; border-radius:50%; background:#7fb77e; margin-right:6px; vertical-align:1px }
+  #reset { background:none; border:1px solid #3a3733; color:var(--ivory); width:40px; height:40px; border-radius:50%; cursor:pointer; display:grid; place-items:center; flex:none }
+  #reset:hover { border-color:var(--gold) }
+
+  #log { flex:1; overflow-y:auto; padding:18px 14px 8px; display:flex; flex-direction:column; gap:10px; overscroll-behavior:contain; scroll-behavior:smooth }
+  .hero { text-align:center; padding:18px 10px 6px }
+  .hero h2 { margin:0 0 6px; font:500 26px/1.15 'Cormorant Garamond', serif; color:var(--ink) }
+  .hero p { margin:0 auto; max-width:300px; color:var(--muted); font-size:13.5px }
+  .rule { width:44px; height:1px; background:var(--gold); margin:14px auto 0 }
+  .m { max-width:86%; padding:11px 14px; border-radius:18px; overflow-wrap:anywhere; font-size:14.5px; animation:in .22s ease-out }
+  @keyframes in { from { opacity:0; transform:translateY(6px) } }
+  .user { align-self:flex-end; background:var(--user-bg); color:var(--user-ink); border-bottom-right-radius:6px; font-weight:400 }
+  .bot { align-self:flex-start; background:var(--bot-bg); border:1px solid var(--line); border-bottom-left-radius:6px }
+  .bot p { margin:0 0 8px } .bot p:last-child { margin:0 } .bot ul, .bot ol { margin:4px 0 8px; padding-left:18px } .bot li { margin:3px 0 }
+  .bot a { color:var(--gold-deep); text-decoration-color:var(--gold); text-underline-offset:3px }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bot a { color:var(--gold) } }
+  .bot strong { font-weight:500 }
+  .meta { font-size:10.5px; letter-spacing:.06em; color:var(--muted); margin-top:6px; text-transform:uppercase }
+  .typing { display:flex; gap:5px; padding:14px 16px }
+  .typing i { width:7px; height:7px; border-radius:50%; background:var(--gold); animation:b 1.1s infinite ease-in-out }
+  .typing i:nth-child(2) { animation-delay:.15s } .typing i:nth-child(3) { animation-delay:.3s }
+  @keyframes b { 0%,80%,100% { opacity:.25; transform:scale(.8) } 40% { opacity:1; transform:scale(1) } }
+
+  #chips { display:flex; gap:8px; overflow-x:auto; padding:6px 14px 10px; scrollbar-width:none; scroll-snap-type:x proximity }
+  #chips::-webkit-scrollbar { display:none }
+  #chips button { flex:none; scroll-snap-align:start; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:999px; padding:9px 14px; font:400 13px Jost, sans-serif; cursor:pointer; white-space:nowrap; min-height:38px }
+  #chips button:hover { border-color:var(--gold) }
+
+  form { display:flex; gap:8px; align-items:flex-end; padding:10px 12px calc(12px + env(safe-area-inset-bottom)); background:var(--bg); border-top:1px solid var(--line) }
+  textarea { flex:1; resize:none; max-height:120px; min-height:46px; padding:12px 16px; border-radius:23px; border:1px solid var(--line); background:var(--card); color:var(--ink); font:400 16px/1.35 Jost, sans-serif; outline:none }
+  textarea:focus { border-color:var(--gold) }
+  #send { width:46px; height:46px; flex:none; border:0; border-radius:50%; background:var(--black); color:var(--gold); cursor:pointer; display:grid; place-items:center }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #send { background:var(--gold); color:#111 } }
+  #send:disabled { opacity:.4 }
+  .foot { text-align:center; font-size:10px; letter-spacing:.08em; color:var(--muted); padding:0 12px 8px; background:var(--bg); text-transform:uppercase }
+  @media (min-width:600px) { .foot { padding-bottom:14px } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="mark" aria-hidden="true">DG</div>
+    <div class="title"><h1>DarGlobal</h1><p><span class="status"></span>Property Assistant</p></div>
+    <button id="reset" aria-label="New chat" title="New chat">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+    </button>
+  </header>
+
+  <div id="log" aria-live="polite"></div>
+
+  <div id="chips" aria-label="Suggested questions">
+    <button>What is DarGlobal?</button>
+    <button>When did DarGlobal list on the LSE?</button>
+    <button>DarGlobal luxury brand partners</button>
+    <button>Apartments for rent on Wasalt</button>
+    <button>4-bedroom villas for rent</button>
+    <button>Property types in Al Khobar</button>
+  </div>
+
+  <form>
+    <textarea id="q" rows="1" placeholder="Ask about projects or listings…" aria-label="Your question" enterkeyhint="send"></textarea>
+    <button id="send" aria-label="Send">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+    </button>
+  </form>
+  <div class="foot">Candidate demo · not an official DarGlobal service</div>
+</div>
+
+<script>
+const log = document.getElementById('log'), form = document.querySelector('form'), q = document.getElementById('q'), send = document.getElementById('send');
+let msgs = [];
+const HERO = '<div class="hero"><h2>Welcome</h2><p>Ask about DarGlobal\'s company and projects, or Wasalt property listings across Saudi Arabia.</p><div class="rule"></div></div>';
+
+function add(role, html, meta) {
+  const d = document.createElement('div'); d.className = 'm ' + role; d.innerHTML = html;
+  if (meta) { const s = document.createElement('div'); s.className = 'meta'; s.textContent = meta; d.append(s); }
+  log.append(d); log.scrollTop = log.scrollHeight; return d;
+}
+async function ask(text) {
+  add('user', DOMPurify.sanitize(text)); msgs.push({role:'user', content:text});
+  send.disabled = true; const wait = add('bot typing', '<i></i><i></i><i></i>');
+  try {
+    const r = await fetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({messages:msgs})});
+    const j = await r.json(); wait.remove();
+    if (!r.ok) throw new Error(j.error || r.status);
+    msgs.push({role:'assistant', content:j.reply});
+    add('bot', DOMPurify.sanitize(marked.parse(j.reply)), j.model && j.model.split('/').pop().replace(':free', ''))
+      .querySelectorAll('a').forEach(a => { a.target = '_blank'; a.rel = 'noopener'; });
+  } catch (e) { wait.remove(); msgs.pop(); add('bot', 'The free model is busy right now — please try again in a moment.'); console.warn(e); }
+  send.disabled = false;
+}
+function grow() { q.style.height = 'auto'; q.style.height = Math.min(q.scrollHeight, 120) + 'px'; }
+q.addEventListener('input', grow);
+q.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
+form.onsubmit = e => { e.preventDefault(); const t = q.value.trim(); if (t && !send.disabled) { q.value = ''; grow(); ask(t); } };
+document.querySelectorAll('#chips button').forEach(b => b.onclick = () => !send.disabled && ask(b.textContent));
+function reset() { msgs = []; log.innerHTML = HERO; }
+document.getElementById('reset').onclick = reset;
+reset();
+</script>
+</body>
+</html>
