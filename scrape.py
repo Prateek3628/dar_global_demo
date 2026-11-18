@@ -4,15 +4,21 @@ Wasalt: the sitemaps it publishes in robots.txt (cdn.wasalt.sa) -> listings, loc
 DarGlobal: darglobal.co.uk sits behind an Incapsula bot wall, so its public Wikipedia
 articles are used instead.
 """
-import collections, json, re, urllib.parse, urllib.request
+import collections, json, re, time, urllib.error, urllib.parse, urllib.request
 
-UA = {"User-Agent": "DarGlobal-assignment-bot/1.0 (candidate technical assignment)"}
+UA = {"User-Agent": "DarGlobal-assignment-bot/1.0 (+https://github.com/Prateek3628/dar_global_demo)"}
 SITEMAP = "https://cdn.wasalt.sa/sitemap/{}_en_sa.xml.gz"
-WIKI = ["DarGlobal", "Dar Al Arkan Real Estate Development Company", "Trump International Hotel Maldives"]
+WIKI_SEARCH = ['"Dar Global"', '"DarGlobal"', '"Dar Al Arkan"']  # every article mentioning the company
 
 
-def get(url):
-    return urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60).read().decode()
+def get(url, retries=3):
+    for n in range(retries):
+        try:
+            return urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60).read().decode()
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or n == retries - 1:
+                raise
+            time.sleep(int(e.headers.get("Retry-After") or 5 * (n + 1)))  # polite back-off
 
 
 def locs(name):
@@ -70,22 +76,37 @@ def wasalt():
     return docs
 
 
+def wiki_titles():
+    titles = []
+    for term in WIKI_SEARCH:
+        q = urllib.parse.urlencode({"action": "query", "list": "search", "srsearch": term, "srlimit": 20, "format": "json"})
+        titles += [r["title"] for r in json.loads(get(f"https://en.wikipedia.org/w/api.php?{q}"))["query"]["search"]
+                   if not r["title"].startswith("List of") and r["title"] not in titles]
+    return titles
+
+
 def wikipedia():
     docs = []
-    for t in WIKI:
+    for t in wiki_titles():
+        time.sleep(1)  # stay well under Wikimedia's rate limits
         q = urllib.parse.urlencode({"action": "query", "prop": "extracts", "explaintext": 1,
                                     "format": "json", "redirects": 1, "titles": t})
         page = next(iter(json.loads(get(f"https://en.wikipedia.org/w/api.php?{q}"))["query"]["pages"].values()))
         url = "https://en.wikipedia.org/wiki/" + page["title"].replace(" ", "_")
+        core = re.search(r"\bDar\b|Trump International", t)  # the company's own / project pages
         for i, chunk in enumerate(re.split(r"\n(?===)", page.get("extract", ""))):
-            if chunk.strip():
+            if chunk.strip() and (core or re.search(r"dar ?global|dar al arkan", chunk, re.I)):
                 docs.append({"source": "DarGlobal", "title": f"{page['title']} ({i})", "url": url,
                              "always": t == "DarGlobal" and i == 0, "text": chunk.strip()})
     return docs
 
 
+def collect():
+    return wikipedia() + wasalt()
+
+
 if __name__ == "__main__":
-    docs = wikipedia() + wasalt()
+    docs = collect()
     with open("data/corpus.json", "w") as f:
         json.dump(docs, f)
     print(len(docs), "docs;", collections.Counter(d["source"] for d in docs))
